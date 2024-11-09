@@ -17,7 +17,7 @@ public class RecordTable {
         table.put("address", address);
     }
     // const
-    public RecordTable(String name, TokenType kind, Object value) {
+    public RecordTable(String name, Integer value, TokenType kind) {
         table.put("name", name);
         table.put("kind", kind);
         table.put("value", value);

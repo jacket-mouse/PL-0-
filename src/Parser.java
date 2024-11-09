@@ -21,6 +21,10 @@ public class Parser {
         this.lexer = lexer;
         recordTable = new ArrayList<>(size);
         midcodeTable = new ArrayList<>(size);
+        for (int i = 0; i < size; i++) {
+            recordTable.add(null);
+            midcodeTable.add(null);
+        }
         level = 1;
         cx = 0;
         tx = 0;
@@ -59,7 +63,9 @@ public class Parser {
     // 输出中间代码表
     public void listcode() {
         for (MidCode midCode : midcodeTable) {
-            System.out.println(midCode);
+            if (midCode != null && midCode.table != null) {
+                System.out.println("F: " + midCode.table.get("F") + " L: " + midCode.table.get("L") + " A: " + midCode.table.get("A"));
+            }
         }
     }
 
@@ -70,7 +76,7 @@ public class Parser {
         switch (type) {
             case TokenType.SYM_CONST -> {
                 Integer value = Integer.parseInt(look.getText());
-                rt = new RecordTable(name, type, value);
+                rt = new RecordTable(name, value, type);
             }
             case TokenType.SYM_VAR -> {
                 rt = new RecordTable(name, type, level, dx);
@@ -87,7 +93,7 @@ public class Parser {
     // 查找变量位置
     public int position(String name) {
         int index = tx;
-        while (index > 0 && recordTable.get(index).table.get("name") != name) {
+        while (index > 0 && !recordTable.get(index).table.get("name").equals(name)) {
             index--;
         }
         if (index <= 0) error("变量未声明");
@@ -156,13 +162,20 @@ public class Parser {
     }
 
     public void expression() {
+        // 处理正负号
+        String op = "";
         if (look.getType() == TokenType.SYM_PLUS || look.getType() == TokenType.SYM_MINUS) {
+            op = look.getText();
             move();
         }
         term();
+        if (op.equals("-")) genMidCode(InstrucType.OPR, 0, 1); // 负号运算，取反
         while (look.getType() == TokenType.SYM_PLUS || look.getType() == TokenType.SYM_MINUS) {
+            op = look.getText();
             move();
             term();
+            if (op.equals("+")) genMidCode(InstrucType.OPR, 0, 2); // 加
+            else if (op.equals("-")) genMidCode(InstrucType.OPR, 0, 3); // 减
         }
     }
 
@@ -205,9 +218,11 @@ public class Parser {
     }
 
     public void condition() {
+        String op = "";
         if (look.getType() == TokenType.SYM_ODD) {
             move();
             expression();
+            genMidCode(InstrucType.OPR, 0, 6);
         } else {
             expression();
             if (look.getType() == TokenType.SYM_EQU ||
@@ -216,8 +231,17 @@ public class Parser {
                     look.getType() == TokenType.SYM_NEQ ||
                     look.getType() == TokenType.SYM_LEQ ||
                     look.getType() == TokenType.SYM_GEQ) {
+                op = look.getText();
                 move();
                 expression();
+                switch (op) {
+                    case "==" -> genMidCode(InstrucType.OPR, 0, 8);
+                    case "!=" -> genMidCode(InstrucType.OPR, 0, 9);
+                    case "<" -> genMidCode(InstrucType.OPR, 0, 10);
+                    case ">=" -> genMidCode(InstrucType.OPR, 0, 11);
+                    case ">" -> genMidCode(InstrucType.OPR, 0, 12);
+                    case "<=" -> genMidCode(InstrucType.OPR, 0, 13);
+                }
 
             } else error("缺少比较符号");
         }
@@ -226,10 +250,14 @@ public class Parser {
     public void statement() {
         if (look.getType() == TokenType.SYM_IDENTIFIER) {
             String ident = look.getText();
+            int i = position(ident);
+            // 只有变量能够被赋值
+            if (recordTable.get(i).table.get("kind") != TokenType.SYM_VAR) error("不是变量");
             move();
             if (look.getType() == TokenType.SYM_BECOMES) {
                 move();
                 expression();
+                genMidCode(InstrucType.STO, level - (Integer) recordTable.get(i).table.get("level"), (Integer) recordTable.get(i).table.get("address"));
             }
             if (look.getType() == TokenType.SYM_SEMICOLON) move();
             else error("缺少;");
@@ -290,7 +318,7 @@ public class Parser {
     public void prog() {
         block();
         if (look.getType() == TokenType.SYM_DOT) {
-            System.out.println("Finished");
+            listcode();
             System.exit(0);
         }
     }
