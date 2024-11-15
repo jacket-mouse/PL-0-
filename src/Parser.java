@@ -27,7 +27,7 @@ public class Parser {
         }
         level = 1;
         cx = 0;
-        tx = 0;
+        tx = -1;
         move();
         prog();
     }
@@ -43,7 +43,7 @@ public class Parser {
         while (token == Token.NULL) {
             token = lexer.nextToken();
         }
-        System.out.println(token);
+//        System.out.println(token);
         this.look = token;
     }
 
@@ -62,9 +62,11 @@ public class Parser {
 
     // 输出中间代码表
     public void listcode() {
+        int index = 0;
         for (MidCode midCode : midcodeTable) {
             if (midCode != null && midCode.table != null) {
-                System.out.println("F: " + midCode.table.get("F") + " L: " + midCode.table.get("L") + " A: " + midCode.table.get("A"));
+                System.out.println(index + " F: " + midCode.table.get("F") + " L: " + midCode.table.get("L") + " A: " + midCode.table.get("A"));
+                index++;
             }
         }
     }
@@ -83,7 +85,7 @@ public class Parser {
                 dx++;
             }
             case TokenType.SYM_PROCEDURE -> {
-                rt = new RecordTable(name, type, level);
+                rt = new RecordTable(name, type, level, cx);
             }
             default -> rt = null;
         }
@@ -92,11 +94,12 @@ public class Parser {
 
     // 查找变量位置
     public int position(String name) {
+        // 可能会有找到相同层次但作用域不同的变量？？
         int index = tx;
         while (index > 0 && !recordTable.get(index).table.get("name").equals(name)) {
             index--;
         }
-        if (index <= 0) error("变量未声明");
+        if (index < 0) error("变量未声明");
         return index;
     }
 
@@ -137,8 +140,6 @@ public class Parser {
                     canBreak = true;
                 }
                 if (look.getType() == TokenType.SYM_COMMA) {
-                    // 将变量写入符号表
-
                     move();
                 } else if (!canBreak) error("缺少;");
             } else error("缺少标识符");
@@ -147,17 +148,16 @@ public class Parser {
 
     public void sym_procedure() {
         if (look.getType() == TokenType.SYM_IDENTIFIER) {
-            RecordTable rt = new RecordTable(look.getText(), TokenType.SYM_PROCEDURE, level);
-            recordTable.add(rt);
+            enter(TokenType.SYM_PROCEDURE, look.getText());
             level++;
             move();
         } else error("函数名必须为标识符");
         if (look.getType() == TokenType.SYM_SEMICOLON) move();
         else error("缺少;");
         block();
+        level--;
         if (look.getType() == TokenType.SYM_SEMICOLON) {
             move();
-            level--;
         } else error("缺少;");
     }
 
@@ -182,7 +182,7 @@ public class Parser {
     public void factor() {
         if (look.getType() == TokenType.SYM_IDENTIFIER) {
             String ident = look.getText();
-            int i = position(ident);
+            int i = position(ident); // 查找当前变量在符号表中的位置
             Map<String, Object> table = recordTable.get(i).table;
             switch (table.get("kind")) {
                 case TokenType.SYM_CONST -> genMidCode(InstrucType.LIT, 0, (Integer) table.get("value"));
@@ -210,7 +210,7 @@ public class Parser {
             move();
             factor();
             if (operator.equals("*")) {
-                genMidCode(InstrucType.OPR, 9, 4); // 乘法
+                genMidCode(InstrucType.OPR, 0, 4); // 乘法
             } else if (operator.equals("/")) {
                 genMidCode(InstrucType.OPR, 0, 5); // 除法
             }
@@ -242,12 +242,12 @@ public class Parser {
                     case ">" -> genMidCode(InstrucType.OPR, 0, 12);
                     case "<=" -> genMidCode(InstrucType.OPR, 0, 13);
                 }
-
             } else error("缺少比较符号");
         }
     }
 
     public void statement() {
+        int cx1, cx2; // 存储中间代码的临时位置
         if (look.getType() == TokenType.SYM_IDENTIFIER) {
             String ident = look.getText();
             int i = position(ident);
@@ -265,6 +265,11 @@ public class Parser {
             move();
             if (look.getType() == TokenType.SYM_IDENTIFIER) {
                 String ident = look.getText();
+                int i = position(ident);
+                RecordTable rt = recordTable.get(i);
+                if (rt.table.get("kind") == TokenType.SYM_PROCEDURE) {
+                    genMidCode(InstrucType.CAL, level - (Integer) rt.table.get("level"), (Integer) rt.table.get("address")); // 过程名的地址为中间代码表中的地址
+                }
                 move();
             } else error("call缺少标识符");
             if (look.getType() == TokenType.SYM_SEMICOLON) move();
@@ -280,13 +285,21 @@ public class Parser {
             condition();
             if (look.getType() == TokenType.SYM_THEN) move();
             else error("缺少then");
+            cx1 = cx;
+            genMidCode(InstrucType.JPC, 0, 0);
             statement();
+            midcodeTable.get(cx1).table.replace("A", cx);
         } else if (look.getType() == TokenType.SYM_WHILE) {
             move();
+            cx1 = cx; // 记录条件判断指令的位置
             condition();
+            cx2 = cx;
+            genMidCode(InstrucType.JPC, 0, 0);
             if (look.getType() == TokenType.SYM_DO) move();
             else error("缺少do");
             statement();
+            genMidCode(InstrucType.JMP, 0, cx1);
+            midcodeTable.get(cx2).table.replace("A", cx);
         } else error("无效语句");
 
     }
@@ -294,10 +307,16 @@ public class Parser {
     public void block() {
         // 初始化
         dx = 3; // 变量的初始地址
+        int tx_0 = tx; // 该层次局部变量分配到的在符号表中的相对位置，到这里了，下一位是要存新的变量的位置
+        int cx_0 = cx; // 存储当前层代码的开始位置
+
+
         genMidCode(InstrucType.JMP, 0, 0);
 
+
+
         // 判断嵌套层次
-        if (level > 4) error("超过三层嵌套");
+        if (level > 3) error("超过三层嵌套");
 
         if (look.getType() == TokenType.SYM_CONST) {
             move();
@@ -310,17 +329,29 @@ public class Parser {
         while (look.getType() == TokenType.SYM_PROCEDURE) {
             move();
             sym_procedure();
+            while (look.getType() == TokenType.SYM_PROCEDURE) {
+                move();
+                sym_procedure();
+            }
         }
+        midcodeTable.get(cx_0).table.replace("A", cx); // 将跳转位置改到这里
+        genMidCode(InstrucType.INT, 0, dx); // 分配栈空间
         statement();
-
+        genMidCode(InstrucType.OPR, 0, 0); // RET
     }
 
     public void prog() {
         block();
         if (look.getType() == TokenType.SYM_DOT) {
+            // 打印符号表
+            for (RecordTable rd : recordTable) {
+                if (rd != null) System.out.println(rd.table);
+            }
+            // 打印中间代码
             listcode();
             System.exit(0);
         }
+
     }
 
 }
