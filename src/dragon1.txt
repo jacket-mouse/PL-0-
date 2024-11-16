@@ -1,0 +1,14 @@
+var m, n, g;
+procedure gcd;
+	begin
+		if n = 0 then
+			g := m;
+		else
+			g := gcd
+	end
+begin
+	m := 24;
+	n := 16;
+	g := gcd()
+end
+

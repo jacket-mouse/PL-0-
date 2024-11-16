@@ -10,6 +10,7 @@ public class Main {
             String input = Files.readString(Path.of("src/dragon0.txt"));
             Lexer lexer = new Lexer(input);
             Parser parser = new Parser(lexer);
+            Interpreter interpreter = new Interpreter(parser);
         } catch (IOException e) {
             throw new RuntimeException(e);
         }

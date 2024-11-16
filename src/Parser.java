@@ -16,6 +16,10 @@ public class Parser {
     private int level; // 当前的块深度
     private int tx; // 当前的符号表指针
 
+    public List<MidCode> getMidcodeTable() {
+        return midcodeTable;
+    }
+
 
     public Parser(Lexer lexer) {
         this.lexer = lexer;
@@ -63,12 +67,18 @@ public class Parser {
     // 输出中间代码表
     public void listcode() {
         int index = 0;
+//        int int_index = 0; // 记录最后一个INT
         for (MidCode midCode : midcodeTable) {
             if (midCode != null && midCode.table != null) {
+//                if (midCode.table.get("F") == InstrucType.INT) int_index = index;
                 System.out.println(index + " F: " + midCode.table.get("F") + " L: " + midCode.table.get("L") + " A: " + midCode.table.get("A"));
                 index++;
             }
         }
+//        // 将最后一个INT指令的A+3
+//        MidCode code = midcodeTable.get(int_index);
+//        code.table.replace("A", (int) code.table.get("A") + 3);
+//        midcodeTable.set(int_index, code);
     }
 
     // 符号表记录
@@ -236,7 +246,7 @@ public class Parser {
                 expression();
                 switch (op) {
                     case "==" -> genMidCode(InstrucType.OPR, 0, 8);
-                    case "!=" -> genMidCode(InstrucType.OPR, 0, 9);
+                    case "<>" -> genMidCode(InstrucType.OPR, 0, 9);
                     case "<" -> genMidCode(InstrucType.OPR, 0, 10);
                     case ">=" -> genMidCode(InstrucType.OPR, 0, 11);
                     case ">" -> genMidCode(InstrucType.OPR, 0, 12);
@@ -312,7 +322,6 @@ public class Parser {
 
 
         genMidCode(InstrucType.JMP, 0, 0);
-
 
 
         // 判断嵌套层次
