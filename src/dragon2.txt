@@ -1,0 +1,17 @@
+var x;
+procedure B;
+var y;
+begin
+    y := x;
+end;
+
+procedure A;
+begin
+    call B;
+end;
+
+
+begin
+    x := 1;
+    call A;
+end.

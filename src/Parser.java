@@ -319,13 +319,13 @@ public class Parser {
         dx = 3; // 变量的初始地址
         int tx_0 = tx; // 该层次局部变量分配到的在符号表中的相对位置，到这里了，下一位是要存新的变量的位置
         int cx_0 = cx; // 存储当前层代码的开始位置
-
+        int dx_0; // 存储当前层的dx，因为如果有嵌套层的话，dx会变化。
 
         genMidCode(InstrucType.JMP, 0, 0);
 
 
         // 判断嵌套层次
-        if (level > 3) error("超过三层嵌套");
+        if (level > 4) error("超过三层嵌套");
 
         if (look.getType() == TokenType.SYM_CONST) {
             move();
@@ -335,6 +335,7 @@ public class Parser {
             move(); // 前置move
             sym_var();
         }
+        dx_0 = dx; // 利用了dx_0是局部变量和dx是全局变量的特性
         while (look.getType() == TokenType.SYM_PROCEDURE) {
             move();
             sym_procedure();
@@ -343,6 +344,7 @@ public class Parser {
                 sym_procedure();
             }
         }
+        dx = dx_0;
         midcodeTable.get(cx_0).table.replace("A", cx); // 将跳转位置改到这里
         genMidCode(InstrucType.INT, 0, dx); // 分配栈空间
         statement();
@@ -358,7 +360,7 @@ public class Parser {
             }
             // 打印中间代码
             listcode();
-            System.exit(0);
+//            System.exit(0);
         }
 
     }
