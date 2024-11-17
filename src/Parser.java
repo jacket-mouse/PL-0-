@@ -317,7 +317,6 @@ public class Parser {
     public void block() {
         // 初始化
         dx = 3; // 变量的初始地址
-        int tx_0 = tx; // 该层次局部变量分配到的在符号表中的相对位置，到这里了，下一位是要存新的变量的位置
         int cx_0 = cx; // 存储当前层代码的开始位置
         int dx_0; // 存储当前层的dx，因为如果有嵌套层的话，dx会变化。
 
