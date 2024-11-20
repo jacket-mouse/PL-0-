@@ -20,7 +20,6 @@ public class Parser {
         return midcodeTable;
     }
 
-
     public Parser(Lexer lexer) {
         this.lexer = lexer;
         recordTable = new ArrayList<>(size);
@@ -114,6 +113,7 @@ public class Parser {
     }
 
     public void sym_const() {
+        move();
         boolean canBreak = false;
         while (!canBreak) {
             if (look.getType() == TokenType.SYM_IDENTIFIER) {
@@ -138,6 +138,7 @@ public class Parser {
     }
 
     public void sym_var() {
+        move();
         boolean canBreak = false;
         while (!canBreak) {
             if (look.getType() == TokenType.SYM_IDENTIFIER) {
@@ -157,6 +158,7 @@ public class Parser {
     }
 
     public void sym_procedure() {
+        move();
         if (look.getType() == TokenType.SYM_IDENTIFIER) {
             enter(TokenType.SYM_PROCEDURE, look.getText());
             level++;
@@ -256,90 +258,102 @@ public class Parser {
         }
     }
 
-    public void statement() {
-        int cx1, cx2; // 存储中间代码的临时位置
+    public void assign() {
+        String ident = look.getText();
+        int i = position(ident);
+        // 只有变量能够被赋值
+        if (recordTable.get(i).table.get("kind") != TokenType.SYM_VAR) error("不是变量");
+        move();
+        if (look.getType() == TokenType.SYM_BECOMES) {
+            move();
+            expression();
+            genMidCode(InstrucType.STO, level - (Integer) recordTable.get(i).table.get("level"), (Integer) recordTable.get(i).table.get("address"));
+        }
+        if (look.getType() == TokenType.SYM_SEMICOLON) move();
+        else error("缺少;");
+    }
+
+    public void call() {
+        move();
         if (look.getType() == TokenType.SYM_IDENTIFIER) {
             String ident = look.getText();
             int i = position(ident);
-            // 只有变量能够被赋值
-            if (recordTable.get(i).table.get("kind") != TokenType.SYM_VAR) error("不是变量");
-            move();
-            if (look.getType() == TokenType.SYM_BECOMES) {
-                move();
-                expression();
-                genMidCode(InstrucType.STO, level - (Integer) recordTable.get(i).table.get("level"), (Integer) recordTable.get(i).table.get("address"));
+            RecordTable rt = recordTable.get(i);
+            if (rt.table.get("kind") == TokenType.SYM_PROCEDURE) {
+                genMidCode(InstrucType.CAL, level - (Integer) rt.table.get("level"), (Integer) rt.table.get("address")); // 过程名的地址为中间代码表中的地址
             }
-            if (look.getType() == TokenType.SYM_SEMICOLON) move();
-            else error("缺少;");
+            move();
+        } else error("call缺少标识符");
+        if (look.getType() == TokenType.SYM_SEMICOLON) move();
+        else error("缺少;");
+    }
+
+    public void begin() {
+        move();
+        while (look.getType() != TokenType.SYM_END) {
+            statement();
+        }
+        move();
+    }
+
+    public void If() {
+        int cx1; // 存储中间代码的临时位置
+        move();
+        condition();
+        if (look.getType() == TokenType.SYM_THEN) move();
+        else error("缺少then");
+        cx1 = cx;
+        genMidCode(InstrucType.JPC, 0, 0);
+        statement();
+        midcodeTable.get(cx1).table.replace("A", cx);
+    }
+
+    public void While() {
+        int cx1, cx2; // 存储中间代码的临时位置
+        move();
+        cx1 = cx; // 记录条件判断指令的位置
+        condition();
+        cx2 = cx;
+        genMidCode(InstrucType.JPC, 0, 0);
+        if (look.getType() == TokenType.SYM_DO) move();
+        else error("缺少do");
+        statement();
+        genMidCode(InstrucType.JMP, 0, cx1);
+        midcodeTable.get(cx2).table.replace("A", cx);
+    }
+
+    public void statement() {
+        if (look.getType() == TokenType.SYM_IDENTIFIER) {
+            assign();
         } else if (look.getType() == TokenType.SYM_CALL) {
-            move();
-            if (look.getType() == TokenType.SYM_IDENTIFIER) {
-                String ident = look.getText();
-                int i = position(ident);
-                RecordTable rt = recordTable.get(i);
-                if (rt.table.get("kind") == TokenType.SYM_PROCEDURE) {
-                    genMidCode(InstrucType.CAL, level - (Integer) rt.table.get("level"), (Integer) rt.table.get("address")); // 过程名的地址为中间代码表中的地址
-                }
-                move();
-            } else error("call缺少标识符");
-            if (look.getType() == TokenType.SYM_SEMICOLON) move();
-            else error("缺少;");
+            call();
         } else if (look.getType() == TokenType.SYM_BEGIN) {
-            move();
-            while (look.getType() != TokenType.SYM_END) {
-                statement();
-            }
-            move();
+            begin();
         } else if (look.getType() == TokenType.SYM_IF) {
-            move();
-            condition();
-            if (look.getType() == TokenType.SYM_THEN) move();
-            else error("缺少then");
-            cx1 = cx;
-            genMidCode(InstrucType.JPC, 0, 0);
-            statement();
-            midcodeTable.get(cx1).table.replace("A", cx);
+            If();
         } else if (look.getType() == TokenType.SYM_WHILE) {
-            move();
-            cx1 = cx; // 记录条件判断指令的位置
-            condition();
-            cx2 = cx;
-            genMidCode(InstrucType.JPC, 0, 0);
-            if (look.getType() == TokenType.SYM_DO) move();
-            else error("缺少do");
-            statement();
-            genMidCode(InstrucType.JMP, 0, cx1);
-            midcodeTable.get(cx2).table.replace("A", cx);
+            While();
         } else error("无效语句");
 
     }
 
     public void block() {
-        // 初始化
         dx = 3; // 变量的初始地址
         int cx_0 = cx; // 存储当前层代码的开始位置
         int dx_0; // 存储当前层的dx，因为如果有嵌套层的话，dx会变化。
-
         genMidCode(InstrucType.JMP, 0, 0);
-
-
         // 判断嵌套层次
         if (level > 4) error("超过三层嵌套");
-
         if (look.getType() == TokenType.SYM_CONST) {
-            move();
             sym_const();
         }
         if (look.getType() == TokenType.SYM_VAR) {
-            move(); // 前置move
             sym_var();
         }
         dx_0 = dx; // 利用了dx_0是局部变量和dx是全局变量的特性
         while (look.getType() == TokenType.SYM_PROCEDURE) {
-            move();
             sym_procedure();
             while (look.getType() == TokenType.SYM_PROCEDURE) {
-                move();
                 sym_procedure();
             }
         }
@@ -357,9 +371,7 @@ public class Parser {
             for (RecordTable rd : recordTable) {
                 if (rd != null) System.out.println(rd.table);
             }
-            // 打印中间代码
-            listcode();
-//            System.exit(0);
+            listcode(); // 打印中间代码
         }
 
     }

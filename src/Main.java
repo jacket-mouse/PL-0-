@@ -7,7 +7,7 @@ import java.io.FileWriter;
 public class Main {
     public static void main(String[] args) throws IOException {
         try {
-            String input = Files.readString(Path.of("src/dragon2.txt"));
+            String input = Files.readString(Path.of("src/dragon3.txt"));
             Lexer lexer = new Lexer(input);
             Parser parser = new Parser(lexer);
             Interpreter interpreter = new Interpreter(parser);
