@@ -22,7 +22,6 @@ public class Interpreter {
         return res_B;
     }
 
-
     // 打印栈的内容（可视化）
     public void printStack() {
         int top = T;
